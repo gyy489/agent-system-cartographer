@@ -153,10 +153,19 @@ class SystemCartographer
   def load_yaml(path)
     return {} unless path.file?
 
-    YAML.safe_load(path.read, [], [], false) || {}
+    safe_load_yaml(path.read) || {}
   rescue Psych::Exception => e
     @errors << finding("invalid_yaml", relative(path), e.message.lines.first.to_s.strip)
     {}
+  end
+
+  def safe_load_yaml(content)
+    keywords = YAML.method(:safe_load).parameters.select { |kind, _name| %i[key keyreq].include?(kind) }.map(&:last)
+    if keywords.include?(:permitted_classes)
+      YAML.safe_load(content, permitted_classes: [], permitted_symbols: [], aliases: false)
+    else
+      YAML.safe_load(content, [], [], false)
+    end
   end
 
   def load_registry_skills
@@ -262,7 +271,7 @@ class SystemCartographer
     match = content.match(/\A---\s*\n(.*?)\n---\s*\n/m)
     return {} unless match
 
-    data = YAML.safe_load(match[1], [], [], false)
+    data = safe_load_yaml(match[1])
     data.is_a?(Hash) ? data : {}
   rescue StandardError => e
     @errors << finding("invalid_skill_frontmatter", relative(path), e.message)

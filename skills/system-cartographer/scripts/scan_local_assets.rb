@@ -184,9 +184,18 @@ class LocalAssetCartographer
   end
 
   def load_yaml(path)
-    YAML.safe_load(path.read, [], [], false) || {}
+    safe_load_yaml(path.read) || {}
   rescue Psych::Exception => e
     abort_with("Invalid YAML #{path}: #{e.message.lines.first.to_s.strip}")
+  end
+
+  def safe_load_yaml(content)
+    keywords = YAML.method(:safe_load).parameters.select { |kind, _name| %i[key keyreq].include?(kind) }.map(&:last)
+    if keywords.include?(:permitted_classes)
+      YAML.safe_load(content, permitted_classes: [], permitted_symbols: [], aliases: false)
+    else
+      YAML.safe_load(content, [], [], false)
+    end
   end
 
   def expand_path(value)
@@ -300,7 +309,7 @@ class LocalAssetCartographer
     match = content.match(/\A---\s*\n(.*?)\n---\s*\n/m)
     return path.dirname.basename.to_s unless match
 
-    data = YAML.safe_load(match[1], [], [], false)
+    data = safe_load_yaml(match[1])
     data.is_a?(Hash) ? (data["name"] || path.dirname.basename.to_s) : path.dirname.basename.to_s
   rescue StandardError => e
     @warnings << finding("skill_name_unreadable", path.to_s, e.message)

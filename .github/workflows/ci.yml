@@ -1,0 +1,37 @@
+name: Cartography checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dashboard dependency
+        run: gem install webrick --no-document
+      - name: Scan the minimal system
+        run: |
+          ruby skills/system-cartographer/scripts/update_topology.rb \
+            --root examples/minimal-agent-system --strict
+      - name: Generate a structure diagram
+        run: |
+          python3 skills/structure-diagrammer/scripts/diagram_structure.py \
+            --input skills/system-cartographer \
+            --output /tmp/cartographer-diagram \
+            --basename system-cartographer
+          test -s /tmp/cartographer-diagram/system-cartographer/system-cartographer-structure.md
+          test -s /tmp/cartographer-diagram/system-cartographer/system-cartographer-structure.svg
+      - name: Test the read-only dashboard
+        run: capabilities/skills-dashboard/tests/test_skills_dashboard.sh

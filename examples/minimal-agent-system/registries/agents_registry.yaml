@@ -1,0 +1,9 @@
+version: 1
+agents:
+  - id: example-agent
+    name: Example Agent
+    kind: local_agent
+    status: development
+    manifest: agents/manifests/example-agent.yaml
+    source_path: agents/example-agent
+    skills_root: skills/.runtime/codex/global/skills

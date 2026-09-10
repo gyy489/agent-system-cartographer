@@ -1,0 +1,36 @@
+version: 2
+management:
+  active_surface: skills
+skills:
+  - name: system-cartographer
+    category: architecture/topology
+    provenance: personal
+    status: experimental
+    path: skills/system-cartographer
+    entrypoint: SKILL.md
+    risk_level: low
+    network_access: none
+    filesystem_access: bounded_metadata_read_and_managed_output_write
+    purpose: Generate evidence-backed topology and audit reports from local Agent metadata.
+
+  - name: structure-diagrammer
+    category: architecture/visualization
+    provenance: personal
+    status: experimental
+    path: skills/structure-diagrammer
+    entrypoint: SKILL.md
+    risk_level: low
+    network_access: none
+    filesystem_access: bounded_input_read_and_output_write
+    purpose: Turn a Skill, Agent, or project directory into a compact structure diagram.
+
+  - name: skills-dashboard
+    category: architecture/dashboard
+    provenance: personal
+    status: experimental
+    path: capabilities/skills-dashboard/skills/skills-dashboard
+    entrypoint: SKILL.md
+    risk_level: low
+    network_access: loopback_only
+    filesystem_access: registry_read_and_private_runtime_state_write
+    purpose: Browse Skill, Capability, and runtime relationships in a local read-only dashboard.

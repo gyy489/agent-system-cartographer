@@ -1,0 +1,12 @@
+version: 1
+skill_sets:
+  cartography:
+    description: Early-stage local Agent topology and visualization tools.
+    skills:
+      - system-cartographer
+      - structure-diagrammer
+      - skills-dashboard
+    compatibility:
+      codex: native
+      claude-code: needs-review
+      openclaw: needs-review

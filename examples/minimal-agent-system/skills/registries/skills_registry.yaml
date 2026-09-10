@@ -1,0 +1,14 @@
+version: 2
+management:
+  active_surface: skills/.runtime/codex/global/skills
+skills:
+  - name: source-checker
+    category: research/evidence
+    provenance: example
+    status: active
+    path: skills/personal/source-checker
+    entrypoint: SKILL.md
+    risk_level: low
+    network_access: none
+    filesystem_access: read
+    purpose: Keep sourced statements separate from open questions.

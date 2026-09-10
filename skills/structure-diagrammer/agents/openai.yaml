@@ -1,0 +1,4 @@
+interface:
+  display_name: "Structure Diagrammer"
+  short_description: "Draw agent and skill structure maps"
+  default_prompt: "Use $structure-diagrammer to draw a clear structure diagram for this agent, skill, or project."

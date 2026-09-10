@@ -1,0 +1,4 @@
+interface:
+  display_name: "System Cartographer"
+  short_description: "Map local agents, skills, files, and runtime relationships"
+  default_prompt: "Scan the current workspace, update its physical and logical topology maps, and report inconsistencies."

@@ -1,0 +1,4 @@
+id: example-agent
+runtime: codex
+skills:
+  - source-checker

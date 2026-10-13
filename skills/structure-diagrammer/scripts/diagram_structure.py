@@ -15,6 +15,7 @@ import textwrap
 
 
 DEFAULT_OUTPUT = Path("artifacts/structure-diagrams")
+FRONTMATTER_LIMIT = 8192
 SPECIAL_DIRS = {
     "agents": ("agents", "agent metadata"),
     "scripts": ("scripts", "executable helpers"),
@@ -65,22 +66,32 @@ def unique_id(base: str, used: set[str]) -> str:
     return value
 
 
-def read_text(path: Path, limit: int = 12000) -> str:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")[:limit]
-    except OSError:
-        return ""
-
-
 def frontmatter(path: Path) -> dict[str, str]:
-    text = read_text(path)
-    match = re.match(r"\A---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
-    if not match:
+    if path.is_symlink() or not path.is_file():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as stream:
+            first = stream.readline(FRONTMATTER_LIMIT + 1)
+            if first.strip() != "---":
+                return {}
+            size = len(first.encode("utf-8"))
+            lines: list[str] = []
+            for _ in range(128):
+                raw = stream.readline(FRONTMATTER_LIMIT + 1)
+                size += len(raw.encode("utf-8"))
+                if not raw or size > FRONTMATTER_LIMIT or not raw.endswith("\n"):
+                    return {}
+                if raw.strip() == "---":
+                    break
+                lines.append(raw)
+            else:
+                return {}
+    except OSError:
         return {}
     data: dict[str, str] = {}
     current_key = ""
     current_lines: list[str] = []
-    for raw in match.group(1).splitlines():
+    for raw in lines:
         if raw.startswith((" ", "\t")) and current_key:
             current_lines.append(raw.strip())
             continue
@@ -99,22 +110,24 @@ def frontmatter(path: Path) -> dict[str, str]:
 
 
 def count_files(path: Path) -> int:
+    if path.is_symlink():
+        return 0
     if path.is_file():
         return 1
     try:
-        return sum(1 for item in path.rglob("*") if item.is_file())
+        return sum(1 for item in path.rglob("*") if not item.is_symlink() and item.is_file())
     except OSError:
         return 0
 
 
 def list_files(path: Path, max_items: int = 8) -> list[Path]:
-    if not path.exists():
+    if path.is_symlink() or not path.exists():
         return []
     if path.is_file():
         return [path]
     files = []
     for item in sorted(path.rglob("*"), key=lambda p: p.as_posix()):
-        if item.is_file() and "__pycache__" not in item.parts and ".git" not in item.parts:
+        if not item.is_symlink() and item.is_file() and "__pycache__" not in item.parts and ".git" not in item.parts:
             files.append(item)
         if len(files) >= max_items:
             break
@@ -152,7 +165,7 @@ def summarize_skill(root: Path, nodes: list[Node], edges: list[Edge], used: set[
 
     for dirname, (label, detail) in SPECIAL_DIRS.items():
         child = root / dirname
-        if child.exists():
+        if child.exists() and not child.is_symlink():
             count = count_files(child)
             child_id = add_node(nodes, used, label, dirname.strip(".") or "directory", f"{detail}; {count} file(s)", child)
             edges.append(Edge(root_id, child_id, "contains"))
@@ -163,7 +176,7 @@ def summarize_skill(root: Path, nodes: list[Node], edges: list[Edge], used: set[
 
     for special in ["requirements.txt", "pyproject.toml", "package.json", "README.md", "LICENSE"]:
         item = root / special
-        if item.is_file():
+        if item.is_file() and not item.is_symlink():
             item_id = add_node(nodes, used, special, "file", file_role(item), item)
             edges.append(Edge(root_id, item_id, "uses"))
 
@@ -174,6 +187,8 @@ def summarize_project(root: Path, nodes: list[Node], edges: list[Edge], used: se
     root_id = add_node(nodes, used, f"Project: {root.name}", "project", root.as_posix(), root)
     description = "project folder structure"
     for child in sorted(root.iterdir(), key=lambda p: p.name.lower()) if root.is_dir() else []:
+        if child.is_symlink():
+            continue
         if child.name.startswith(".") and child.name not in {".codex-plugin"}:
             continue
         if child.name in {"node_modules", "__pycache__"}:
@@ -190,15 +205,10 @@ def summarize_project(root: Path, nodes: list[Node], edges: list[Edge], used: se
 
 def summarize_agent(root: Path, nodes: list[Node], edges: list[Edge], used: set[str]) -> tuple[str, str]:
     if root.is_file():
-        text = read_text(root)
         name = root.stem
         root_id = add_node(nodes, used, f"Agent: {name}", "agent", "manifest file", root)
         manifest_id = add_node(nodes, used, root.name, "manifest", "configuration", root)
         edges.append(Edge(root_id, manifest_id, "configured by"))
-        for key in ["skills", "tools", "contexts", "logs", "outputs"]:
-            if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
-                node_id = add_node(nodes, used, key, key, f"mentioned in {root.name}", root)
-                edges.append(Edge(manifest_id, node_id, "declares", inferred=True))
         return name, "agent manifest"
     return summarize_project(root, nodes, edges, used)
 
@@ -479,34 +489,73 @@ def build_graph(root: Path, mode: str) -> tuple[str, str, list[Node], list[Edge]
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Skill, agent, plugin, or project path.")
+    parser.add_argument("--input-root", type=Path, required=True, help="Explicit approved input boundary.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output directory.")
+    parser.add_argument("--output-root", type=Path, required=True, help="Explicit approved output boundary.")
     parser.add_argument("--basename", help="Output basename. Defaults to input folder/file name.")
+    parser.add_argument("--replace", action="store_true", help="Explicitly replace four existing output files.")
     parser.add_argument("--mode", choices=["auto", "skill", "agent", "plugin", "project"], default="auto")
     return parser.parse_args(argv)
 
 
+def confined(path: Path, boundary: Path, label: str) -> Path:
+    if boundary.is_symlink() or not boundary.is_dir():
+        raise ValueError(f"{label} root must be an existing non-symlink directory: {boundary}")
+    resolved_boundary = boundary.resolve(strict=True)
+    if resolved_boundary == Path(resolved_boundary.anchor):
+        raise ValueError(f"{label} root cannot be the filesystem root")
+    resolved_path = path.resolve(strict=False)
+    if not resolved_path.is_relative_to(resolved_boundary):
+        raise ValueError(f"{label} path escapes declared root: {path}")
+    return resolved_path
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    root = args.input.expanduser()
-    if not root.is_absolute():
-        root = (Path.cwd() / root).resolve()
-    if not root.exists():
-        print(f"Input path does not exist: {root}", flush=True)
+    try:
+        if args.basename and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", args.basename):
+            raise ValueError("basename must contain only letters, numbers, hyphens and underscores")
+        input_path = args.input.expanduser()
+        if input_path.is_symlink():
+            raise ValueError(f"Input path cannot be a symlink: {input_path}")
+        root = confined(input_path, args.input_root.expanduser(), "Input")
+        output_parent = confined(args.output.expanduser(), args.output_root.expanduser(), "Output")
+        if not root.exists():
+            raise ValueError(f"Input path does not exist: {root}")
+        if not root.is_file() and not root.is_dir():
+            raise ValueError(f"Input path must be a file or directory: {root}")
+        folder_name = args.basename or slug(root.stem if root.is_file() else root.name)
+        output_dir = confined(output_parent / folder_name, args.output_root.expanduser(), "Output")
+        if output_dir.is_symlink():
+            raise ValueError(f"Output directory cannot be a symlink: {output_dir}")
+    except (OSError, ValueError) as error:
+        print(f"Boundary error: {error}", flush=True)
         return 1
     mode = detect_mode(root, args.mode)
     name, description, nodes, edges = build_graph(root, mode)
-    output_dir = args.output / (args.basename or slug(root.stem if root.is_file() else root.name))
-    output_dir.mkdir(parents=True, exist_ok=True)
     base = args.basename or slug(name)
     mmd_path = output_dir / f"{base}-structure.mmd"
     svg_path = output_dir / f"{base}-structure.svg"
     spec_path = output_dir / f"{base}-archscribe-spec.json"
     md_path = output_dir / f"{base}-structure.md"
 
-    mmd_path.write_text(mermaid(nodes, edges), encoding="utf-8")
-    svg_path.write_text(svg(nodes, edges, f"{name} structure"), encoding="utf-8")
-    spec_path.write_text(json.dumps(archscribe_spec(nodes, edges, name, description), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(report_md(root, mode, name, description, nodes, edges, mmd_path, svg_path, spec_path), encoding="utf-8")
+    paths = [mmd_path, svg_path, spec_path, md_path]
+    if any(path.is_symlink() or path.is_dir() for path in paths):
+        print("Boundary error: output target is a symlink or directory", flush=True)
+        return 1
+    if not args.replace and any(path.exists() for path in paths):
+        print("Boundary error: output already exists; use --replace only with explicit approval", flush=True)
+        return 1
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payloads = [
+        mermaid(nodes, edges),
+        svg(nodes, edges, f"{name} structure"),
+        json.dumps(archscribe_spec(nodes, edges, name, description), ensure_ascii=False, indent=2) + "\n",
+        report_md(root, mode, name, description, nodes, edges, mmd_path, svg_path, spec_path),
+    ]
+    for path, payload in zip(paths, payloads):
+        with path.open("w" if args.replace else "x", encoding="utf-8") as stream:
+            stream.write(payload)
 
     print(f"Generated structure diagram: {md_path}")
     print(f"Mermaid: {mmd_path}")

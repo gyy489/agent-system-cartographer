@@ -31,7 +31,9 @@ Draw a skill structure:
 ```bash
 python3 skills/structure-diagrammer/scripts/diagram_structure.py \
   --input skills/system-cartographer \
-  --output /tmp/structure-diagrammer \
+  --input-root skills \
+  --output /private/tmp/structure-diagrammer \
+  --output-root /private/tmp \
   --basename system-cartographer
 ```
 
@@ -40,7 +42,9 @@ Draw a project or agent folder:
 ```bash
 python3 skills/structure-diagrammer/scripts/diagram_structure.py \
   --input /path/to/agent-or-project \
-  --output /tmp/structure-diagrammer \
+  --input-root /path/to \
+  --output /private/tmp/structure-diagrammer \
+  --output-root /private/tmp \
   --mode auto
 ```
 
@@ -55,6 +59,12 @@ Outputs:
 
 ## Output Policy
 
+- Set narrow input and output roots that you are authorized to use. The script
+  enforces containment, but the roots do not grant access by themselves.
+- It reads only bounded Skill frontmatter and file structure metadata. It does
+  not read Agent manifest bodies or follow symlinks.
+- Existing diagram files are preserved. Pass `--replace` only when you intend
+  to replace the four files for the selected diagram.
 - Put temporary diagrams under `skills/artifacts/structure-diagrammer`.
 - Put durable two-head-wu explanatory architecture diagrams under
   `skills/outputs/structure-diagrammer`.

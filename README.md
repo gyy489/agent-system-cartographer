@@ -32,7 +32,9 @@ ruby skills/system-cartographer/scripts/update_topology.rb \
 # 为一个 Skill 生成结构说明、Mermaid、SVG 和 Archscribe spec
 python3 skills/structure-diagrammer/scripts/diagram_structure.py \
   --input skills/system-cartographer \
-  --output /tmp/cartographer-diagram \
+  --input-root skills \
+  --output /private/tmp/cartographer-diagram \
+  --output-root /private/tmp \
   --basename system-cartographer
 
 # 在两头乌式注册表项目中启动只读仪表盘
